@@ -37,7 +37,7 @@ int main(int argc, char **argv)
 
         return ret;
     }
-    else if (strcmp(action, "reload") == 0)
+    else if (strcmp(action, "restart") == 0)
     {
         int ret_rm = 0;
         int ret_in = 0;
@@ -61,7 +61,7 @@ int main(int argc, char **argv)
         return -1;
     
     }
-    char *arg    = argv[2];
+    char *arg = argv[2];
 
     if (strcmp(action, "filter") == 0)
     {
@@ -80,6 +80,10 @@ int main(int argc, char **argv)
         printf("SafeHarbor: mismatch -> %s\n", arg);
 
         ioctl(device, BRIDGE_MISMATCH_SET, arg);
+    }
+    else if (strcmp(action, "reload") == 0)
+    {
+        ioctl(device, BRIDGE_CONFIG_RELOAD, arg);
     }
     else
     {

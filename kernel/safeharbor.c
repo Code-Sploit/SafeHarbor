@@ -74,6 +74,7 @@ static unsigned int filter(void *priv, struct sk_buff *skb, const struct nf_hook
 static char *get_current_time_string(void);
 static char *ip_ntoa(unsigned int ip);
 
+static int parse_line(char *line);
 static int parse_rule(char *rule);
 static int config_load(void);
 
@@ -332,6 +333,15 @@ static long int bridge_ctl(struct file *file, unsigned int cmd, unsigned long ar
             }
 
             break;
+        
+        case BRIDGE_CONFIG_RELOAD:
+            num_rules = 0;
+
+            int ret = config_load();
+
+            printk(KERN_INFO "SafeHarbor: Configuration was reloaded [%s]\n", (ret == 0) ? "success" : "failed");
+
+            break;
 
         default:
             kfree(arg_str); // Free allocated memory
@@ -510,6 +520,29 @@ static void __exit firewall_exit(void)
     mutex_destroy(&rule_mutex);
 }
 
+static void remove_whitespaces(char *str);
+
+static void remove_whitespaces(char *str)
+{
+    int i = 0;
+    int j = 0;
+
+    // Find the index of the first non-whitespace character
+    while (str[i] == ' ') {
+        i++;
+    }
+
+    // Shift the string to remove leading whitespaces
+    while (str[i] != '\0') {
+        str[j] = str[i];
+        i++;
+        j++;
+    }
+
+    // Null-terminate the string at the new end
+    str[j] = '\0';
+}
+
 static int config_load(void)
 {
     struct file *file;
@@ -555,8 +588,19 @@ static int config_load(void)
             {
                 continue;
             }
+            
+            remove_whitespaces(line);
 
-            ret = parse_rule(line);
+            if (line[0] == '#')
+            {
+                continue;
+            }
+            else if (line[0] == '\n')
+            {
+                continue;
+            }
+
+            ret = parse_line(line);
 
             if (ret < 0)
             {
@@ -570,6 +614,103 @@ out:
     filp_close(file, NULL);
     mutex_unlock(&file_mutex);
     return ret;
+}
+
+#include <linux/kernel.h>
+#include <linux/string.h>
+
+static int parse_line(char *line)
+{
+    char *buffer = kmalloc(1024, GFP_KERNEL);
+
+    strcpy(buffer, line);
+    
+    char *keyword = strsep(&buffer, " ");
+
+    if (strcmp(keyword, "filter") == 0)
+    {
+        char *arg = strsep(&buffer, " ");
+
+        if (arg != NULL)
+        {
+            if (strcmp(arg, "on") == 0)
+            {
+                DO_FILTERING = 1;
+            }
+            else if (strcmp(arg, "off") == 0)
+            {
+                DO_FILTERING = 0;
+            }
+            else
+            {
+                printk(KERN_INFO "SafeHarbor: Invalid value for setting DO_FILTERING\n");
+                return -1;
+            }
+        }
+        else
+        {
+            printk(KERN_INFO "SafeHarbor: Missing argument for setting DO_FILTERING\n");
+            return -1;
+        }
+    }
+    else if (strcmp(keyword, "mismatch") == 0)
+    {
+        char *arg = strsep(&buffer, " ");
+
+        if (arg != NULL)
+        {
+            if (strcmp(arg, "on") == 0)
+            {
+                DO_SHOW_RULE_MISMATCHES = 1;
+            }
+            else if (strcmp(arg, "off") == 0)
+            {
+                DO_SHOW_RULE_MISMATCHES = 0;
+            }
+            else
+            {
+                printk(KERN_INFO "SafeHarbor: Invalid value for setting DO_SHOW_RULE_MISMATCHES\n");
+                return -1;
+            }
+        }
+        else
+        {
+            printk(KERN_INFO "SafeHarbor: Missing argument for setting DO_SHOW_RULE_MISMATCHES\n");
+            return -1;
+        }
+    }
+    else if (strcmp(keyword, "logging") == 0)
+    {
+        char *arg = strsep(&buffer, " ");
+
+        if (arg != NULL) 
+        {
+            if (strcmp(arg, "on") == 0)
+            {
+                DO_LOGGING = 1;
+            }
+            else if (strcmp(arg, "off") == 0)
+            {
+                DO_LOGGING = 0;
+            }
+            else
+            {
+                printk(KERN_INFO "SafeHarbor: Invalid value for setting DO_LOGGING\n");
+                return -1;
+            }
+        }
+        else
+        {
+            printk(KERN_INFO "SafeHarbor: Missing argument for setting DO_LOGGING\n");
+            return -1;
+        }
+    }
+    else
+    {
+        parse_rule(line);
+    }
+
+    return 0;
 }
 
 static int parse_rule(char *rule)
