@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <fcntl.h>
 
-#include "../include/safeharbor.h"
+#include "../include/main.h"
 
 #define KERNEL_MODULE_PATH "/usr/share/safeharbor/safeharbor.ko"
 
