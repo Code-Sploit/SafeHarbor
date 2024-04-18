@@ -1,0 +1,1 @@
+savedcmd_/data/SafeHarbor/kernel/safeharbor.ko := ld -r -m elf_x86_64 -z noexecstack --no-warn-rwx-segments --build-id=sha1  -T scripts/module.lds -o /data/SafeHarbor/kernel/safeharbor.ko /data/SafeHarbor/kernel/safeharbor.o /data/SafeHarbor/kernel/safeharbor.mod.o
