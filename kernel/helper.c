@@ -9,6 +9,7 @@
 #include <linux/ioctl.h>
 #include <linux/mutex.h>
 #include <linux/sched.h>
+#include <linux/slab.h>
 #include <linux/init.h>
 #include <linux/cred.h>
 #include <linux/path.h>

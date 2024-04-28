@@ -106,7 +106,7 @@ int filter_match_port(unsigned int port, char *rule_port)
 
 unsigned int filter(void *priv, struct sk_buff *skb, const struct nf_hook_state *state)
 {
-    if (DO_FILTERING == 0)
+    if (configuration->filtering == 0)
     {
         return NF_ACCEPT;
     }
@@ -151,87 +151,138 @@ unsigned int filter(void *priv, struct sk_buff *skb, const struct nf_hook_state 
     }
 
     int drop = 0;
-    int rule_active = 0;
 
-    for (int i = 0; i < num_rules; i++)
+    char *rule_active = kmalloc(64, GFP_KERNEL);
+    char *group_active = kmalloc(64, GFP_KERNEL);
+
+    int rule_in_group_active = 0;
+    int log_in_group = 1;
+
+    /* Parse rules first */
+
+    for (int i = 0; i < configuration->rule_count; i++)
     {
-        struct Rule rule = rules[i];
+        struct Rule *rule = configuration->rules[i];
 
-        char *rule_action    = rule.action;
-        char *rule_protocol  = rule.protocol;
-        char *rule_direction = rule.direction;
-        char *rule_src_ip    = rule.src_ip;
-        char *rule_src_port  = rule.src_port;
-        char *rule_dest_ip   = rule.dest_ip;
-        char *rule_dest_port = rule.dest_port;
-
-        if (strcmp(rule_action, "allow") == 0)
+        if (rule->action == 0)
         {
-            if (filter_match_protocol(protocol, rule_protocol) &&
-                filter_match_direction(direction, rule_direction) &&
-                filter_match_ip(src_ip, rule_src_ip) &&
-                filter_match_port(src_port, rule_src_port) &&
-                filter_match_ip(dest_ip, rule_dest_ip) &&
-                filter_match_port(dest_port, rule_dest_port))
-            {              
-                drop = 0;
-                rule_active = i + 1;
-            }
-        }
-        else if (strcmp(rule_action, "deny") == 0)
-        {
-            if (filter_match_protocol(protocol, rule_protocol) &&
-                filter_match_direction(direction, rule_direction) &&
-                filter_match_ip(src_ip, rule_src_ip) &&
-                filter_match_port(src_port, rule_src_port) &&
-                filter_match_ip(dest_ip, rule_dest_ip) &&
-                filter_match_port(dest_port, rule_dest_port))
-            {
-                drop = 1;
-                rule_active = i + 1;
-            }
-        }
-        else
-        {
-            printk(KERN_INFO "Invalid rule action: `%s` rule: `%d`\n", rule_action, i);
+            /* It's an allow filter so no filtering required */
 
             continue;
         }
+        else
+        {
+            if (filter_match_protocol(protocol, rule->protocol) == FILTER_MATCH &&
+                filter_match_direction(direction, rule->direction) == FILTER_MATCH &&
+                filter_match_ip(src_ip, rule->src) == FILTER_MATCH &&
+                filter_match_ip(dest_ip, rule->dst) == FILTER_MATCH &&
+                filter_match_port(src_port, rule->sport) == FILTER_MATCH &&
+                filter_match_port(dest_port, rule->dport) == 1)
+            {
+                drop = 1;
+                rule_in_group_active = -1;
+
+                rule_active = kstrdup(rule->name, GFP_KERNEL);
+            }
+        }
     }
 
-    if (drop == 1)
+    /* Parse groups next */
+
+    for (int i = 0; i < configuration->group_count; i++)
     {
-        log_message("PACKET: [%s] [%s] [%s] [%d] [%s] [%d] [%s] by rule [%d]\n",
-                    (protocol == IPPROTO_TCP) ? "tcp" : "udp",
-                    (direction == 0) ? "out" : "in",
-                    ip_ntoa(src_ip),
-                    src_port,
-                    ip_ntoa(dest_ip),
-                    dest_port, "DROPPED", rule_active);
-    }
-    else if (drop == 0)
-    {
-        if (rule_active != 0)
+        struct Group *group = configuration->groups[i];
+
+        if (group->filtering == 0)
         {
-            log_message("PACKET: [%s] [%s] [%s] [%d] [%s] [%d] [%s] by rule [%d]\n",
-                (protocol == IPPROTO_TCP) ? "tcp" : "udp",
-                (direction == 0) ? "out" : "in",
-                ip_ntoa(src_ip),
-                src_port,
-                ip_ntoa(dest_ip),
-                dest_port, "ACCEPTED", rule_active);
+            continue;
+        }
+
+        if (group->logging == 0)
+        {
+            log_in_group = 0;
+        }
+
+        for (int j = 0; j < group->rule_count; j++)
+        {
+            struct Rule *rule = group->rules[j];
+
+            if (rule->action == 0)
+            {
+                /* It's an allow filter so no filtering required */
+
+                continue;
+            }
+            else
+            {
+                if (filter_match_protocol(protocol, rule->protocol) == FILTER_MATCH &&
+                filter_match_direction(direction, rule->direction) == FILTER_MATCH &&
+                filter_match_ip(src_ip, rule->src) == FILTER_MATCH &&
+                filter_match_ip(dest_ip, rule->dst) == FILTER_MATCH &&
+                filter_match_port(src_port, rule->sport) == FILTER_MATCH &&
+                filter_match_port(dest_port, rule->dport) == 1)
+                {
+                    drop = 1;
+                    rule_in_group_active = j;
+
+                    group_active = kstrdup(group->name, GFP_KERNEL);
+                }
+            }
+        }
+    }
+
+    if (configuration->logging != 0)
+    {
+        if (rule_in_group_active >= 0 && log_in_group == 1)
+        {
+            if (configuration->mismatches == 1)
+            {
+                log_message("PACKET: [%s] [%s] [%s] [%d] [%s] [%d] [%s] by group [%s] rule [%d]\n",
+                        (protocol == IPPROTO_TCP) ? "tcp" : "udp",
+                        (direction == 0) ? "out" : "in",
+                        ip_ntoa(src_ip),
+                        src_port,
+                        ip_ntoa(dest_ip),
+                        dest_port, (drop == 1) ? "DROPPED" : "ACCEPTED", group_active, rule_in_group_active);
+            }
+            else
+            {
+                if (drop == 1)
+                {
+                    log_message("PACKET: [%s] [%s] [%s] [%d] [%s] [%d] [%s] by group [%s] rule [%d]\n",
+                        (protocol == IPPROTO_TCP) ? "tcp" : "udp",
+                        (direction == 0) ? "out" : "in",
+                        ip_ntoa(src_ip),
+                        src_port,
+                        ip_ntoa(dest_ip),
+                        dest_port, "DROPPED", group_active, rule_in_group_active);
+                }
+            }
         }
         else
         {
-            if (DO_SHOW_RULE_MISMATCHES == 1)
+            if (configuration->mismatches == 1)
             {
-                log_message("PACKET: [%s] [%s] [%s] [%d] [%s] [%d] [%s] by rule mismatch\n",
-                    (protocol == IPPROTO_TCP) ? "tcp" : "udp",
-                    (direction == 0) ? "out" : "in",
-                    ip_ntoa(src_ip),
-                    src_port,
-                    ip_ntoa(dest_ip),
-                    dest_port, "ACCEPTED");
+                log_message("PACKET: [%s] [%s] [%s] [%d] [%s] [%d] [%s] by rule [%s]\n",
+                            (protocol == IPPROTO_TCP) ? "tcp" : "udp",
+                            (direction == 0) ? "out" : "in",
+                            ip_ntoa(src_ip),
+                            src_port,
+                            ip_ntoa(dest_ip),
+                            dest_port, (drop == 1) ? "DROPPED" : "ACCEPTED", rule_active);
+            }
+            else
+            {
+                if (drop == 1)
+                {
+                    log_message("PACKET: [%s] [%s] [%s] [%d] [%s] [%d] [%s] by rule [%d]\n",
+                        (protocol == IPPROTO_TCP) ? "tcp" : "udp",
+                        (direction == 0) ? "out" : "in",
+                        ip_ntoa(src_ip),
+                        src_port,
+                        ip_ntoa(dest_ip),
+                        dest_port, "DROPPED", rule_active);
+                }
             }
         }
     }

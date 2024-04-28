@@ -98,11 +98,11 @@ long int bridge_ctl(struct file *file, unsigned int cmd, unsigned long arg)
         case BRIDGE_FILTER_SET:
             if (strcmp(arg_str, "on") == 0)
             {
-                DO_FILTERING = 1;
+                configuration->filtering = 1;
             }
             else if (strcmp(arg_str, "off") == 0)
             {
-                DO_FILTERING = 0;
+                configuration->filtering = 0;
             }
             else
             {
@@ -114,11 +114,11 @@ long int bridge_ctl(struct file *file, unsigned int cmd, unsigned long arg)
         case BRIDGE_LOGGING_SET:
             if (strcmp(arg_str, "on") == 0 )
             {
-                DO_LOGGING = 1;
+                configuration->logging = 1;
             }
             else if (strcmp(arg_str, "off") == 0)
             {
-                DO_LOGGING = 0;
+                configuration->logging = 0;
             }
             else
             {
@@ -130,11 +130,11 @@ long int bridge_ctl(struct file *file, unsigned int cmd, unsigned long arg)
         case BRIDGE_MISMATCH_SET:
             if (strcmp(arg_str, "on") == 0 )
             {
-                DO_SHOW_RULE_MISMATCHES = 1;
+                configuration->mismatches = 1;
             }
             else if (strcmp(arg_str, "off") == 0)
             {
-                DO_SHOW_RULE_MISMATCHES = 0;
+                configuration->mismatches = 0;
             }
             else
             {
@@ -144,9 +144,10 @@ long int bridge_ctl(struct file *file, unsigned int cmd, unsigned long arg)
             break;
         
         case BRIDGE_CONFIG_RELOAD:
-            num_rules = 0;
+            int ret = 0;
 
-            int ret = config_load();
+            ret = configuration_reset(configuration);
+            ret = configuration_load(configuration);
 
             printk(KERN_INFO "SafeHarbor: Configuration was reloaded [%s]\n", (ret == 0) ? "success" : "failed");
 

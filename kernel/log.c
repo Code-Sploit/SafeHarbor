@@ -28,7 +28,7 @@
 
 void log_message(const char *format, ...)
 {
-    if (DO_LOGGING == 0)
+    if (configuration->logging == 0)
     {
         return;
     }

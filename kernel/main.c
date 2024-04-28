@@ -27,6 +27,8 @@
 #include "../include/main.h"
 #include "../include/rule.h"
 
+void print_configuration(struct Configuration *configuration);
+
 #define NIPQUAD(addr) \
     ((unsigned char *)&addr)[0], \
     ((unsigned char *)&addr)[1], \
@@ -40,7 +42,7 @@ int FILTER_NOMATCH = 0;
 
 struct tm current_time_value;
 
-struct Rule rules[MAX_RULES];
+struct Configuration *configuration;
 
 struct mutex file_mutex;
 struct mutex rule_mutex;
@@ -51,11 +53,9 @@ char log_buf[LOG_BUF_SIZE];
 
 spinlock_t log_lock;
 
-int num_rules = 0;
-
-int DO_SHOW_RULE_MISMATCHES = 0;
-int DO_FILTERING = 1;
-int DO_LOGGING = 1;
+int CONFIG_DEFAULT_FILTER   = 1;
+int CONFIG_DEFAULT_LOG      = 1;
+int CONFIG_DEFAULT_MISMATCH = 0;
 
 struct nf_hook_ops nf_ops[] = {
     {.hook = filter, .pf = NFPROTO_IPV4, .hooknum = NF_INET_PRE_ROUTING,  .priority = NF_IP_PRI_FIRST},
@@ -65,6 +65,39 @@ struct nf_hook_ops nf_ops[] = {
     {.hook = filter, .pf = NFPROTO_IPV4, .hooknum = NF_INET_POST_ROUTING, .priority = NF_IP_PRI_FIRST},
 };
 
+void print_configuration(struct Configuration *configuration) {
+    int i, j;
+
+    // Print rules in groups
+    for (i = 0; i < configuration->group_count; i++) {
+        printk(KERN_INFO "SafeHarbor: Group [%s] Rules:\n", configuration->groups[i]->name);
+        for (j = 0; j < configuration->groups[i]->rule_count; j++) {
+            printk(KERN_INFO "SafeHarbor: Rule: %s %s %s from %s port %s to %s port %s\n",
+                   configuration->groups[i]->rules[j]->action ? "deny" : "allow",
+                   configuration->groups[i]->rules[j]->protocol,
+                   configuration->groups[i]->rules[j]->direction ? "in" : "out",
+                   configuration->groups[i]->rules[j]->src,
+                   configuration->groups[i]->rules[j]->sport,
+                   configuration->groups[i]->rules[j]->dst,
+                   configuration->groups[i]->rules[j]->dport);
+        }
+    }
+
+    // Print individual rules
+    printk(KERN_INFO "SafeHarbor: Individual Rules:\n");
+    for (i = 0; i < configuration->rule_count; i++) {
+        printk(KERN_INFO "SafeHarbor: Rule: %s %s %s from %s port %s to %s port %s\n",
+               configuration->rules[i]->action ? "deny" : "allow",
+               configuration->rules[i]->protocol,
+               configuration->rules[i]->direction ? "in" : "out",
+               configuration->rules[i]->src,
+               configuration->rules[i]->sport,
+               configuration->rules[i]->dst,
+               configuration->rules[i]->dport);
+    }
+}
+
+
 static int __init firewall_init(void)
 {
     int ret;
@@ -72,6 +105,8 @@ static int __init firewall_init(void)
     printk(KERN_INFO "SafeHarbor: --------------------------------------------------");
     printk(KERN_INFO "SafeHarbor: Initialized\n");
     printk(KERN_INFO "SafeHarbor: Loading configuration\n");
+
+    configuration = configuration_initialize(CONFIG_DEFAULT_FILTER, CONFIG_DEFAULT_LOG, CONFIG_DEFAULT_MISMATCH);
 
     int bridge_ret = bridge_init();
 
@@ -82,7 +117,7 @@ static int __init firewall_init(void)
 
     spin_lock_init(&log_lock);
 
-    ret = config_load();
+    ret = configuration_load(configuration);
 
     if (ret < 0)
     {
