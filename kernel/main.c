@@ -26,6 +26,7 @@
 #include "../include/bridge.h"
 #include "../include/main.h"
 #include "../include/rule.h"
+#include "../include/dpi.h"
 #include "../include/spi.h"
 
 void print_configuration(struct Configuration *configuration);
@@ -59,6 +60,7 @@ int CONFIG_DEFAULT_LOG      = 1;
 int CONFIG_DEFAULT_MISMATCH = 0;
 
 struct SPIConnectionManager *spi_connection_manager;
+struct DPIManager *dpi_manager;
 
 struct nf_hook_ops nf_ops[] = {   
     {.hook = filter, .pf = NFPROTO_IPV4, .hooknum = NF_INET_PRE_ROUTING,  .priority = NF_IP_PRI_FIRST},
@@ -100,7 +102,6 @@ void print_configuration(struct Configuration *configuration) {
     }
 }
 
-
 static int __init firewall_init(void)
 {
     int ret;
@@ -112,6 +113,7 @@ static int __init firewall_init(void)
     configuration = configuration_initialize(CONFIG_DEFAULT_FILTER, CONFIG_DEFAULT_LOG, CONFIG_DEFAULT_MISMATCH);
 
     spi_connection_manager = spi_manager_initialize();
+    dpi_manager = dpi_manager_initialize();
 
     int bridge_ret = bridge_init();
 

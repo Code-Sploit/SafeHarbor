@@ -31,17 +31,29 @@ struct Group
     int rule_count;
 };
 
+struct BannedProtocol
+{
+    char *name;
+    char *target;
+};
+
 struct Configuration
 {
     int filtering;
     int logging;
     int mismatches;
+    int spi;
+    int dpi;
 
     struct Rule **rules;
     struct Group **groups;
 
     int rule_count;
     int group_count;
+
+    int banned_protocol_count;
+
+    struct BannedProtocol **banned_protocols;
 };
 
 struct Configuration *configuration_initialize(int filtering, int logging, int mismatches);

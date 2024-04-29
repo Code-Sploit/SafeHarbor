@@ -24,6 +24,7 @@
 #include "../include/helper.h"
 #include "../include/filter.h"
 #include "../include/spi.h"
+#include "../include/dpi.h"
 
 int filter_match_protocol(int protocol, char *rule_protocol)
 {
@@ -151,9 +152,15 @@ unsigned int filter(void *priv, struct sk_buff *skb, const struct nf_hook_state 
         dest_port  = ntohs(tcp_header->dest);
     }
 
-    unsigned int spi_check_ret = spi_check(priv, skb, state);
+    unsigned int spi_check_ret = (configuration->spi == 1) ? spi_check(priv, skb, state) : NF_ACCEPT;
+    unsigned int dpi_check_ret = (configuration->dpi == 1) ? dpi_analyze(dpi_packet_initialize(priv, skb, state, src_ip, dest_ip, src_port, dest_port, protocol)) : NF_ACCEPT;
 
     if (spi_check_ret == NF_DROP)
+    {
+        return NF_DROP;
+    }
+
+    if (dpi_check_ret == NF_DROP)
     {
         return NF_DROP;
     }

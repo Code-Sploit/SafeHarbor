@@ -26,6 +26,8 @@ extern struct Configuration *configuration;
 
 extern struct SPIConnectionManager *spi_connection_manager;
 
+extern struct DPIManager *dpi_manager;
+
 extern spinlock_t log_lock;
 
 extern int num_rules;

@@ -23,12 +23,14 @@
 #include "../include/constants.h"
 #include "../include/helper.h"
 #include "../include/rule.h"
+#include "../include/dpi.h"
 
 #define FILE_PATH "/etc/safeharbor.conf"
 
 void get_key(char *line, char *buf);
 void get_value(char *line, char *buf);
 void get_key_value(char *line, char *key, char *value);
+void get_keyword_by_index(char *line, char *buf, int index);
 
 struct Rule *make_rule(char *name, char *line);
 
@@ -53,6 +55,31 @@ void get_value(char *line, char *buf) {
         j++;
     }
     buf[j] = '\0';
+}
+
+void get_keyword_by_index(char *line, char *buf, int index)
+{
+    int i = 0;
+    int j = 0;
+    int k = 0;
+
+    for (j = 0; j < index; j++)
+    {
+        while (line[i] != ' ' && line[i] != '\0')
+        {
+            i++;
+        }
+    }
+
+    j = i + 1;
+
+    while (line[j] != ' ' && line[j] != '\0')
+    {
+        buf[k] = line[j];
+
+        k++;
+        j++;
+    }
 }
 
 void get_key_value(char *line, char *key, char *value) {
@@ -281,6 +308,8 @@ int configuration_load(struct Configuration *configuration)
         int settings_parsing = 0;
         int group_parsing = 0;
         int parsing_group = 0;
+        int protocol_parsing = 0;
+        int dpi_parsing = 0;
         int rule_parsing = 0;
         int parsing = 0;
         int group_found = 0;
@@ -322,6 +351,16 @@ int configuration_load(struct Configuration *configuration)
                         rule_parsing = 1;
                         parsing = 1;
                     }
+                    else if (strcmp(identifier, "ProtocolRegistration") == 0)
+                    {
+                        protocol_parsing = 1;
+                        parsing = 1;
+                    }
+                    else if (strcmp(identifier, "DPISettings") == 0)
+                    {
+                        dpi_parsing = 1;
+                        parsing = 1;
+                    }
                 }
             }
             else
@@ -353,9 +392,78 @@ int configuration_load(struct Configuration *configuration)
                     {
                         configuration->mismatches = (strcmp(value, "on") == 0) ? 1 : 0;
                     }
+                    else if (strcmp(key, "spi") == 0)
+                    {
+                        configuration->spi = (strcmp(value, "on") == 0) ? 1 : 0;
+                    }
+                    else if (strcmp(key, "dpi") == 0)
+                    {
+                        configuration->dpi = (strcmp(value, "on") == 0) ? 1 : 0;
+                    }
                     else
                     {
                         printk(KERN_ERR "SafeHarbor: Invalid configuration setting: [%s]\n", key);
+                    }
+                }
+                else if (protocol_parsing == 1)
+                {
+                    if (line[0] == '[')
+                    {
+                        protocol_parsing = 0;
+                        parsing = 0;
+
+                        continue;
+                    }
+
+                    char action[64];
+                    char name[64];
+                    char port[8];
+
+                    get_keyword_by_index(line, action, 0);
+                    get_keyword_by_index(line, name, 2);
+                    get_keyword_by_index(line, port, 5);
+
+                    if (strcmp(action, "register") == 0)
+                    {
+                        /* register protocol <name> as port <port> */
+
+                        struct DPIPortBind *port_bind = dpi_port_bind_initialize(name, atoi(port));
+
+                        dpi_manager_add(dpi_manager, port_bind);
+                    }
+                }
+                else if (dpi_parsing == 1)
+                {
+                    if (line[0] == '[')
+                    {
+                        dpi_parsing = 0;
+                        parsing = 0;
+
+                        continue;
+                    }
+
+                    char action[64];
+                    char name[64];
+                    char target[64];
+
+                    get_keyword_by_index(line, action, 0);
+                    get_keyword_by_index(line, name, 2);
+                    get_keyword_by_index(line, target, 4);
+
+                    if (strcmp(action, "ban") == 0)
+                    {
+                        /* ban protocol <protocol> for <ip/any> */
+
+                        configuration->banned_protocol_count++;
+
+                        struct BannedProtocol *banned_protocol = kmalloc(sizeof(struct BannedProtocol), GFP_KERNEL);
+
+                        banned_protocol->name   = name;
+                        banned_protocol->target = target;
+
+                        configuration->banned_protocols = krealloc(configuration->banned_protocols, configuration->banned_protocol_count * sizeof(struct BannedProtocol *), GFP_KERNEL);
+
+                        configuration->banned_protocols[configuration->banned_protocol_count - 1] = banned_protocol;
                     }
                 }
                 else if (group_parsing == 1)
