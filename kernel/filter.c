@@ -23,6 +23,7 @@
 #include "../include/constants.h"
 #include "../include/helper.h"
 #include "../include/filter.h"
+#include "../include/spi.h"
 
 int filter_match_protocol(int protocol, char *rule_protocol)
 {
@@ -148,6 +149,13 @@ unsigned int filter(void *priv, struct sk_buff *skb, const struct nf_hook_state 
 
         src_port   = ntohs(tcp_header->source);
         dest_port  = ntohs(tcp_header->dest);
+    }
+
+    unsigned int spi_check_ret = spi_check(priv, skb, state);
+
+    if (spi_check_ret == NF_DROP)
+    {
+        return NF_DROP;
     }
 
     int drop = 0;

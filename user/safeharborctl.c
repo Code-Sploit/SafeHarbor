@@ -68,6 +68,8 @@ int main(int argc, char **argv)
         printf("SafeHarbor: filter -> %s\n", arg);
 
         ioctl(device, BRIDGE_FILTER_SET, arg);
+
+        printf("SafeHarbor: exit -> %s\n", arg);
     }
     else if (strcmp(action, "log") == 0)
     {

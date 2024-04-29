@@ -49,7 +49,7 @@ void log_message(const char *format, ...)
     
     if (IS_ERR(file))
     {
-        printk(KERN_ERR "SafeHarbor: Failed to open log file: %ld\n", PTR_ERR(file));
+        //printk(KERN_ERR "SafeHarbor: Failed to open log file: %ld\n", PTR_ERR(file));
         mutex_unlock(&file_mutex);
         return;
     }
